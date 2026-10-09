@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Simulador de Seguimiento Suave (1.er Orden)</title>
+  <title>Simulador Sistema PD (Muelle - Amortiguador)</title>
   <style>
     :root {
       --bg-color: #0b0e14;
@@ -88,10 +88,10 @@
       padding: 14px 18px;
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      gap: 12px;
       overflow-y: auto;
       flex: 1;
-      justify-content: center;
+      justify-content: space-evenly;
     }
 
     .info-grid {
@@ -125,7 +125,7 @@
     .control-group {
       display: flex;
       flex-direction: column;
-      gap: 6px;
+      gap: 4px;
     }
 
     .control-label {
@@ -144,9 +144,8 @@
     }
 
     .control-desc {
-      font-size: 0.8rem;
+      font-size: 0.75rem;
       color: #8b949e;
-      line-height: 1.3;
     }
 
     input[type="range"] {
@@ -245,7 +244,7 @@
           </div>
           <div class="legend-item">
             <div class="legend-color" style="background: var(--target-color);"></div>
-            <span>Punto</span>
+            <span>Masa</span>
           </div>
         </div>
       </div>
@@ -254,10 +253,10 @@
       </div>
     </div>
 
-    <!-- CUADRANTE INFERIOR IZQUIERDO: Controles -->
+    <!-- CUADRANTE INFERIOR IZQUIERDO: Controles de Control PD -->
     <div class="quadrant">
       <div class="quadrant-title">
-        <span>Parámetros del Sistema (1.er Orden)</span>
+        <span>Parámetros del Sistema (PD)</span>
       </div>
       <div class="controls-content">
         <div class="info-grid">
@@ -281,14 +280,31 @@
           </label>
         </div>
 
-        <!-- Único parámetro de suavizado -->
         <div class="control-group">
           <div class="control-label">
-            <span>Velocidad / Suavizado (&alpha;)</span>
-            <span class="val" id="smoothVal">5.0</span>
+            <span>Rigidez Muelle (K_p)</span>
+            <span class="val" id="kpVal">80</span>
           </div>
-          <input type="range" id="smoothSlider" min="0.5" max="25" step="0.5" value="5.0">
-          <div class="control-desc">Constante de velocidad de aproximación. Valores bajos producen un acercamiento muy suave y progresivo; valores altos hacen el seguimiento casi instantáneo.</div>
+          <input type="range" id="kpSlider" min="10" max="300" step="5" value="80">
+          <div class="control-desc">Fuerza de atracción proporcional hacia la posición objetivo</div>
+        </div>
+
+        <div class="control-group">
+          <div class="control-label">
+            <span>Amortiguamiento (K_d)</span>
+            <span class="val" id="kdVal">12.0</span>
+          </div>
+          <input type="range" id="kdSlider" min="0" max="40" step="0.5" value="12">
+          <div class="control-desc">Freno derivativo que disipa energía y evita oscilaciones</div>
+        </div>
+
+        <div class="control-group">
+          <div class="control-label">
+            <span>Masa del Punto (M)</span>
+            <span class="val" id="massVal">1.0</span>
+          </div>
+          <input type="range" id="massSlider" min="0.2" max="5.0" step="0.1" value="1.0">
+          <div class="control-desc">Inercia que afecta la aceleración y respuesta temporal</div>
         </div>
       </div>
     </div>
@@ -304,7 +320,7 @@
           </div>
           <div class="legend-item">
             <div class="legend-color" style="background: var(--target-color);"></div>
-            <span>Punto</span>
+            <span>Masa</span>
           </div>
         </div>
       </div>
@@ -331,8 +347,12 @@
     const statusBadge = document.getElementById('statusBadge');
     const showSpringCheckbox = document.getElementById('showSpringCheckbox');
     
-    const smoothSlider = document.getElementById('smoothSlider');
-    const smoothVal = document.getElementById('smoothVal');
+    const kpSlider = document.getElementById('kpSlider');
+    const kpVal = document.getElementById('kpVal');
+    const kdSlider = document.getElementById('kdSlider');
+    const kdVal = document.getElementById('kdVal');
+    const massSlider = document.getElementById('massSlider');
+    const massVal = document.getElementById('massVal');
 
     // Dimensiones
     let width = 0;
@@ -340,10 +360,12 @@
     let centerX = 0;
     let centerY = 0;
 
-    // Estado del Punto de Mira con modelo de 1er Orden
+    // Estado del Punto de Mira con modelo físico PD
     const target = {
       x: 0,          // Posición relativa X
       y: 0,          // Posición relativa Y
+      vx: 0,         // Velocidad X
+      vy: 0,         // Velocidad Y
       targetX: 0,    // Objetivo (Ratón) X
       targetY: 0,    // Objetivo (Ratón) Y
       radius: 20,
@@ -351,8 +373,10 @@
       isDragging: false,
       color: "#00ffcc",
       
-      // Único Parámetro: Factor de aproximación/suavizado (alfa)
-      smoothFactor: parseFloat(smoothSlider.value)
+      // Parámetros Físicos / Control PD
+      kp: parseFloat(kpSlider.value),
+      kd: parseFloat(kdSlider.value),
+      mass: parseFloat(massSlider.value)
     };
 
     // Estado del Ratón
@@ -436,10 +460,20 @@
       target.isDragging = false;
     });
 
-    // Control Slider
-    smoothSlider.addEventListener('input', (e) => {
-      target.smoothFactor = parseFloat(e.target.value);
-      smoothVal.textContent = target.smoothFactor.toFixed(1);
+    // Control Sliders
+    kpSlider.addEventListener('input', (e) => {
+      target.kp = parseFloat(e.target.value);
+      kpVal.textContent = target.kp;
+    });
+
+    kdSlider.addEventListener('input', (e) => {
+      target.kd = parseFloat(e.target.value);
+      kdVal.textContent = target.kd.toFixed(1);
+    });
+
+    massSlider.addEventListener('input', (e) => {
+      target.mass = parseFloat(e.target.value);
+      massVal.textContent = target.mass.toFixed(1);
     });
 
     // Dibujar Rejilla
@@ -522,7 +556,7 @@
           drawSpring(canvasX, canvasY, mouseCanvasX, mouseCanvasY);
         }
 
-        // Indicador Ratón (Punto azul)
+        // Indicador Ratón
         ctx.save();
         ctx.strokeStyle = '#388bfd';
         ctx.fillStyle = '#388bfd';
@@ -534,7 +568,7 @@
         ctx.restore();
       }
 
-      // Dibujar Retícula Principal (Punto)
+      // Dibujar Retícula Principal (Masa)
       ctx.save();
       ctx.translate(canvasX, canvasY);
 
@@ -674,7 +708,7 @@
         }
         cCtx.stroke();
 
-        // Trazado del Punto (Rojo)
+        // Trazado de la Masa (Rojo)
         cCtx.strokeStyle = '#f85149';
         cCtx.lineWidth = 2.5;
         cCtx.beginPath();
@@ -696,20 +730,31 @@
       const dt = Math.min((now - lastTime) / 1000, 0.05); // Limitar dt máximo a 50ms
       lastTime = now;
 
-      // LEY DE CONTROL DE 1.er ORDEN (Filtro exponencial independiente del framerate)
+      // INTEGRACIÓN FÍSICA PD (Muelle - Amortiguador)
       if (dt > 0) {
-        // Factor de interpolación suavizado exacto: 1 - e^(-alpha * dt)
-        const lerpFactor = 1 - Math.exp(-target.smoothFactor * dt);
+        // Fuerza proporcional (Muelle) y amortiguadora
+        const fx = target.kp * (target.targetX - target.x) - target.kd * target.vx;
+        const fy = target.kp * (target.targetY - target.y) - target.kd * target.vy;
 
-        target.x += (target.targetX - target.x) * lerpFactor;
-        target.y += (target.targetY - target.y) * lerpFactor;
+        // Aceleración a = F / M
+        const ax = fx / target.mass;
+        const ay = fy / target.mass;
 
-        // Limites de pantalla
+        // Integración de Euler
+        target.vx += ax * dt;
+        target.vy += ay * dt;
+
+        target.x += target.vx * dt;
+        target.y += target.vy * dt;
+
+        // Rebotes en bordes
         if (Math.abs(target.x) > centerX - target.radius) {
           target.x = Math.sign(target.x) * (centerX - target.radius);
+          target.vx *= -0.5;
         }
         if (Math.abs(target.y) > centerY - target.radius) {
           target.y = Math.sign(target.y) * (centerY - target.radius);
+          target.vy *= -0.5;
         }
       }
 
@@ -724,7 +769,7 @@
       if (target.isDragging) {
         statusBadge.textContent = "Moviendo";
         statusBadge.className = "status-badge status-dragging";
-        canvas.style.cursor = 'none'; // Se oculta el cursor predeterminado del sistema
+        canvas.style.cursor = 'none'; // Oculta la cruz/cursor mientras se arrastra
       } else if (target.isHovered) {
         statusBadge.textContent = "Seleccionado";
         statusBadge.className = "status-badge status-hover";
