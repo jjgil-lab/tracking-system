@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Simulador Sistema PD (Muelle - Amortiguador)</title>
+  <title>Simulador Sistema Seguidor</title>
   <style>
     :root {
       --bg-color: #0b0e14;
@@ -22,24 +22,31 @@
       user-select: none;
     }
 
+    /* Centrado global con barras de desplazamiento si la ventana es menor a 1200x800 */
     body {
       font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
       background-color: var(--bg-color);
       color: var(--text-color);
-      height: 100vh;
       width: 100vw;
-      padding: 12px;
-      overflow: hidden;
+      height: 100vh;
+      min-width: 1200px;
+      min-height: 800px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow: auto;
     }
 
-    /* Grid principal en 4 cuadrantes iguales (2x2) */
+    /* Contenedor principal FIJO de 1200px por 800px */
     .grid-4 {
+      width: 1200px;
+      height: 800px;
+      padding: 12px;
       display: grid;
       grid-template-columns: 1fr 1fr;
       grid-template-rows: 1fr 1fr;
       gap: 12px;
-      width: 100%;
-      height: 100%;
+      flex-shrink: 0; /* Evita que el contenedor se deforme */
     }
 
     .quadrant {
@@ -65,6 +72,7 @@
       align-items: center;
       background: rgba(0, 0, 0, 0.3);
       flex-shrink: 0;
+      height: 42px;
     }
 
     /* Cuadrante 1: Canvas Principal */
@@ -155,7 +163,6 @@
       cursor: pointer;
     }
 
-    /* Estilo para la casilla del muelle */
     .checkbox-label {
       font-size: 0.9rem;
       font-weight: 600;
@@ -236,7 +243,7 @@
     <!-- CUADRANTE SUPERIOR DERECHO: Evolución Eje Y -->
     <div class="quadrant">
       <div class="quadrant-title">
-        <span>Evolución Temporal - Eje Y (5s)</span>
+        <span>Evolución Temporal - Eje Y</span>
         <div class="chart-legend">
           <div class="legend-item">
             <div class="legend-color" style="background: var(--mouse-color);"></div>
@@ -244,7 +251,7 @@
           </div>
           <div class="legend-item">
             <div class="legend-color" style="background: var(--target-color);"></div>
-            <span>Masa</span>
+            <span>Punto</span>
           </div>
         </div>
       </div>
@@ -253,10 +260,10 @@
       </div>
     </div>
 
-    <!-- CUADRANTE INFERIOR IZQUIERDO: Controles de Control PD -->
+    <!-- CUADRANTE INFERIOR IZQUIERDO: Controles -->
     <div class="quadrant">
       <div class="quadrant-title">
-        <span>Parámetros del Sistema (PD)</span>
+        <span>Parámetros del Sistema</span>
       </div>
       <div class="controls-content">
         <div class="info-grid">
@@ -272,17 +279,16 @@
           </div>
         </div>
 
-        <!-- Casilla de verificación para mostrar/ocultar el muelle -->
         <div class="control-group">
           <label class="checkbox-label">
-            <input type="checkbox" id="showSpringCheckbox" checked>
+            <input type="checkbox" id="showSpringCheckbox">
             <span>Mostrar muelle</span>
           </label>
         </div>
 
         <div class="control-group">
           <div class="control-label">
-            <span>Rigidez Muelle (K_p)</span>
+            <span>Rigidez del seguimiento</span>
             <span class="val" id="kpVal">80</span>
           </div>
           <input type="range" id="kpSlider" min="10" max="300" step="5" value="80">
@@ -291,20 +297,20 @@
 
         <div class="control-group">
           <div class="control-label">
-            <span>Amortiguamiento (K_d)</span>
+            <span>Viscosidad del seguimiento</span>
             <span class="val" id="kdVal">12.0</span>
           </div>
           <input type="range" id="kdSlider" min="0" max="40" step="0.5" value="12">
-          <div class="control-desc">Freno derivativo que disipa energía y evita oscilaciones</div>
+          <div class="control-desc">Fureza viscosa que disipa energía durante el movimiento</div>
         </div>
 
         <div class="control-group">
           <div class="control-label">
-            <span>Masa del Punto (M)</span>
+            <span>Dinámica del punto</span>
             <span class="val" id="massVal">1.0</span>
           </div>
           <input type="range" id="massSlider" min="0.2" max="5.0" step="0.1" value="1.0">
-          <div class="control-desc">Inercia que afecta la aceleración y respuesta temporal</div>
+          <div class="control-desc">Inercia que afecta a la aceleración del punto</div>
         </div>
       </div>
     </div>
@@ -312,7 +318,7 @@
     <!-- CUADRANTE INFERIOR DERECHO: Evolución Eje X -->
     <div class="quadrant">
       <div class="quadrant-title">
-        <span>Evolución Temporal - Eje X (5s)</span>
+        <span>Evolución Temporal - Eje X</span>
         <div class="chart-legend">
           <div class="legend-item">
             <div class="legend-color" style="background: var(--mouse-color);"></div>
@@ -320,7 +326,7 @@
           </div>
           <div class="legend-item">
             <div class="legend-color" style="background: var(--target-color);"></div>
-            <span>Masa</span>
+            <span>Punto</span>
           </div>
         </div>
       </div>
@@ -360,7 +366,7 @@
     let centerX = 0;
     let centerY = 0;
 
-    // Estado del Punto de Mira con modelo físico PD
+    // Estado del Punto de Mira con modelo físico
     const target = {
       x: 0,          // Posición relativa X
       y: 0,          // Posición relativa Y
@@ -371,9 +377,11 @@
       radius: 20,
       isHovered: false,
       isDragging: false,
-      color: "#00ffcc",
+	  color: "#f85149",
+	  // color: "#ff0000",
+      // color: "#00ffcc",
       
-      // Parámetros Físicos / Control PD
+      // Parámetros Físicos / Control
       kp: parseFloat(kpSlider.value),
       kd: parseFloat(kdSlider.value),
       mass: parseFloat(massSlider.value)
@@ -390,31 +398,31 @@
     const startTime = performance.now();
     let lastTime = performance.now();
 
-    function resizeCanvas() {
-      // Main Canvas
+    function initCanvasDimensions() {
+      const dpr = window.devicePixelRatio || 1;
+
+      // 1. Main Canvas
       const rect = canvas.parentElement.getBoundingClientRect();
-      canvas.width = rect.width * window.devicePixelRatio;
-      canvas.height = rect.height * window.devicePixelRatio;
       width = rect.width;
       height = rect.height;
       centerX = width / 2;
       centerY = height / 2;
-      ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+      canvas.width = Math.floor(width * dpr);
+      canvas.height = Math.floor(height * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-      // Canvas X Chart
+      // 2. Canvas X Chart
       const cxRect = chartXCanvas.parentElement.getBoundingClientRect();
-      chartXCanvas.width = cxRect.width * window.devicePixelRatio;
-      chartXCanvas.height = cxRect.height * window.devicePixelRatio;
-      chartXCtx.scale(window.devicePixelRatio, window.devicePixelRatio);
+      chartXCanvas.width = Math.floor(cxRect.width * dpr);
+      chartXCanvas.height = Math.floor(cxRect.height * dpr);
+      chartXCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-      // Canvas Y Chart
+      // 3. Canvas Y Chart
       const cyRect = chartYCanvas.parentElement.getBoundingClientRect();
-      chartYCanvas.width = cyRect.width * window.devicePixelRatio;
-      chartYCanvas.height = cyRect.height * window.devicePixelRatio;
-      chartYCtx.scale(window.devicePixelRatio, window.devicePixelRatio);
+      chartYCanvas.width = Math.floor(cyRect.width * dpr);
+      chartYCanvas.height = Math.floor(cyRect.height * dpr);
+      chartYCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
     }
-
-    window.addEventListener('resize', resizeCanvas);
 
     // Ajuste de coordenadas del ratón con (0,0) en el centro del canvas
     function getCanvasCoords(e) {
@@ -551,7 +559,6 @@
         const mouseCanvasX = centerX + mouse.x;
         const mouseCanvasY = centerY - mouse.y;
 
-        // Dibujar muelle condicionado al checkbox
         if (showSpringCheckbox.checked) {
           drawSpring(canvasX, canvasY, mouseCanvasX, mouseCanvasY);
         }
@@ -568,7 +575,7 @@
         ctx.restore();
       }
 
-      // Dibujar Retícula Principal (Masa)
+      // Dibujar Retícula Principal (Punto)
       ctx.save();
       ctx.translate(canvasX, canvasY);
 
@@ -613,7 +620,6 @@
       const cH = rect.height;
 
       cCtx.save();
-      cCtx.setTransform(window.devicePixelRatio, 0, 0, window.devicePixelRatio, 0, 0);
       cCtx.clearRect(0, 0, cW, cH);
 
       cCtx.beginPath();
@@ -625,14 +631,14 @@
       const minTime = Math.max(0, currentTime - timeWindow);
       const maxTime = Math.max(timeWindow, currentTime);
 
-      const margin = { top: 16, right: 16, bottom: 26, left: 45 };
+      const margin = { top: 16, right: 20, bottom: 32, left: 55 };
       const graphW = cW - margin.left - margin.right;
       const graphH = cH - margin.top - margin.bottom;
 
       const maxBound = axisProp === 'x' ? centerX : centerY;
       const minBound = -maxBound;
 
-      // Guías horizontales y etiquetas
+      // Guías horizontales y etiquetas del eje Y
       cCtx.strokeStyle = '#18202c';
       cCtx.lineWidth = 1.5;
 
@@ -643,11 +649,11 @@
         cCtx.lineTo(cW - margin.right, y);
         cCtx.stroke();
 
-        const val = Math.round(maxBound - (maxBound / 2) * i);
+        const val = Math.round(maxBound - maxBound * i);
         cCtx.fillStyle = '#a3b1c2';
         cCtx.font = 'bold 11px monospace';
         cCtx.textAlign = 'right';
-        cCtx.fillText(val, margin.left - 6, y + 4);
+        cCtx.fillText(val, margin.left - 8, y + 4);
       }
 
       // Marcas Eje X (Tiempo)
@@ -658,13 +664,13 @@
 
         cCtx.beginPath();
         cCtx.moveTo(x, margin.top);
-        cCtx.lineTo(x, cH - margin.bottom);
+        cCtx.lineTo(x, margin.top + graphH);
         cCtx.stroke();
 
         cCtx.fillStyle = '#a3b1c2';
         cCtx.font = 'bold 11px monospace';
         cCtx.textAlign = 'center';
-        cCtx.fillText(tVal.toFixed(1) + 's', x, cH - 8);
+        cCtx.fillText(tVal.toFixed(1) + 's', x, cH - 10);
       }
 
       // Línea de Cero
@@ -681,7 +687,7 @@
       }
       function getY(val) {
         const norm = (val - minBound) / (maxBound - minBound);
-        return cH - margin.bottom - norm * graphH;
+        return margin.top + graphH - norm * graphH;
       }
 
       if (historyData.length >= 2) {
@@ -708,7 +714,7 @@
         }
         cCtx.stroke();
 
-        // Trazado de la Masa (Rojo)
+        // Trazado del Punto (Rojo)
         cCtx.strokeStyle = '#f85149';
         cCtx.lineWidth = 2.5;
         cCtx.beginPath();
@@ -727,27 +733,23 @@
 
     // Bucle Principal de Física y Renderizado
     function animate(now) {
-      const dt = Math.min((now - lastTime) / 1000, 0.05); // Limitar dt máximo a 50ms
+      const dt = Math.min((now - lastTime) / 1000, 0.05);
       lastTime = now;
 
-      // INTEGRACIÓN FÍSICA PD (Muelle - Amortiguador)
+      // INTEGRACIÓN FÍSICA PD
       if (dt > 0) {
-        // Fuerza proporcional (Muelle) y amortiguadora
         const fx = target.kp * (target.targetX - target.x) - target.kd * target.vx;
         const fy = target.kp * (target.targetY - target.y) - target.kd * target.vy;
 
-        // Aceleración a = F / M
         const ax = fx / target.mass;
         const ay = fy / target.mass;
 
-        // Integración de Euler
         target.vx += ax * dt;
         target.vy += ay * dt;
 
         target.x += target.vx * dt;
         target.y += target.vy * dt;
 
-        // Rebotes en bordes
         if (Math.abs(target.x) > centerX - target.radius) {
           target.x = Math.sign(target.x) * (centerX - target.radius);
           target.vx *= -0.5;
@@ -769,7 +771,7 @@
       if (target.isDragging) {
         statusBadge.textContent = "Moviendo";
         statusBadge.className = "status-badge status-dragging";
-        canvas.style.cursor = 'none'; // Oculta la cruz/cursor mientras se arrastra
+        canvas.style.cursor = 'none';
       } else if (target.isHovered) {
         statusBadge.textContent = "Seleccionado";
         statusBadge.className = "status-badge status-hover";
@@ -800,8 +802,9 @@
       requestAnimationFrame(animate);
     }
 
-    // Inicialización
-    resizeCanvas();
+    // Inicialización de dimensiones fijas
+    initCanvasDimensions();
+    
     requestAnimationFrame((now) => {
       lastTime = now;
       animate(now);
